@@ -1,0 +1,67 @@
+{
+  "name": "vault",
+  "version": "1.0.0",
+  "description": "Private encrypted storage for photos, videos and text",
+  "main": "src/main/main.js",
+  "author": "Vault",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build && electron-builder --win",
+    "build:dir": "vite build && electron-builder --win --dir",
+    "build:installer": "vite build && electron-builder --win --dir && if (Test-Path installer\\app-files) { Remove-Item -Recurse -Force installer\\app-files }; Copy-Item -Recurse release\\win-unpacked installer\\app-files; & \"$env:LOCALAPPDATA\\electron-builder\\Cache\\nsis\\nsis-3.0.4.1\\Bin\\makensis.exe\" installer\\setup.nsi",
+    "release": "vite build && electron-builder --win --publish always",
+    "vite:dev": "vite"
+  },
+  "build": {
+    "appId": "com.vault.app",
+    "productName": "Vault",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "src/main/**/*",
+      "src/shared/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "resources/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Antiitw",
+      "repo": "vault-updates"
+    }
+  },
+  "devDependencies": {
+    "@jimp/png": "^0.22.12",
+    "@vitejs/plugin-react": "^4.2.0",
+    "canvas": "^3.2.3",
+    "concurrently": "^8.2.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "vite": "^5.0.0",
+    "wait-on": "^7.2.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "sql.js": "^1.14.1"
+  }
+}
