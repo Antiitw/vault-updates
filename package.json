@@ -1,6 +1,6 @@
 {
   "name": "vault",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Private encrypted storage for photos, videos and text",
   "main": "src/main/main.js",
   "author": "Vault",
