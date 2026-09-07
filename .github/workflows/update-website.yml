@@ -1,0 +1,43 @@
+name: Update Vault Website
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-website:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout company site repo
+        uses: actions/checkout@v4
+        with:
+          repository: belfegor442/belfegor442.github.io
+          token: ${{ secrets.COMPANY_SITE_TOKEN }}
+          path: company-site
+
+      - name: Get latest release info
+        id: release
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "version=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Update download links in Vault page
+        run: |
+          cd company-site
+          VERSION="${{ steps.release.outputs.version }}"
+          SETUP_URL="https://github.com/Antiitw/vault-updates/releases/download/${VERSION}/Vault-${VERSION#v}-setup.exe"
+          PORTABLE_URL="https://github.com/Antiitw/vault-updates/releases/download/${VERSION}/Vault-${VERSION#v}.exe"
+          
+          # Update the badge version
+          sed -i "s|<span id=\"version-badge\">.*</span>|<span id=\"version-badge\">${VERSION} — Now with auto-updates</span>|" docs/Apps/Vault/index.html
+          
+          echo "Updated Vault page to version $VERSION"
+
+      - name: Commit and push changes
+        run: |
+          cd company-site
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/Apps/Vault/
+          git diff --staged --quiet || git commit -m "Update Vault to ${{ steps.release.outputs.version }}"
+          git push
