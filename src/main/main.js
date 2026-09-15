@@ -41,7 +41,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      sandbox: false,
       preload: path.join(__dirname, '../preload.js'),
       webSecurity: true,
       allowRunningInsecureContent: false,
@@ -112,7 +112,7 @@ app.whenReady().then(async () => {
       mainWindow?.webContents.send('migration:needed', migration.getMigrationStatus());
     }
   } catch (err) {
-    safeLog('FATAL: ' + err.message);
+    safeLog('FATAL: ' + err.message + '\n' + err.stack);
     console.error('FATAL:', err);
   }
 });

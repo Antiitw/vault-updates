@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const argon2 = require('argon2');
+const { argon2id } = require('hash-wasm');
 const fs = require('fs');
 const path = require('path');
 
@@ -19,9 +19,8 @@ const HKDF_INFO_HMAC = Buffer.from('vault-hmac-key-v2', 'utf8');
 const HKDF_INFO_VERIFY = Buffer.from('vault-verify-v2', 'utf8');
 
 const ARGON2_OPTIONS = {
-  type: argon2.argon2id,
-  memoryCost: 65536,
-  timeCost: 3,
+  memorySize: 65536,
+  iterations: 3,
   parallelism: 4,
   hashLength: KEY_LENGTH
 };
@@ -36,20 +35,17 @@ function computeHMAC(key, data) {
   return crypto.createHmac('sha256', key).update(data).digest();
 }
 
-function deriveKeyFromPassword(password, salt) {
-  return argon2.hash(password, {
-    ...ARGON2_OPTIONS,
+async function deriveKeyFromPassword(password, salt) {
+  const result = await argon2id({
+    password: typeof password === 'string' ? password : password.toString(),
     salt: salt,
-    raw: true
+    parallelism: ARGON2_OPTIONS.parallelism,
+    iterations: ARGON2_OPTIONS.iterations,
+    memorySize: ARGON2_OPTIONS.memorySize,
+    hashLength: ARGON2_OPTIONS.hashLength,
+    outputType: 'binary'
   });
-}
-
-async function deriveKeyFromPasswordAsync(password, salt) {
-  return argon2.hash(password, {
-    ...ARGON2_OPTIONS,
-    salt: salt,
-    raw: true
-  });
+  return Buffer.from(result);
 }
 
 function deriveSubKey(masterKey, info) {
@@ -61,7 +57,7 @@ function generateMasterKey() {
 }
 
 async function encryptMasterKey(masterKey, password, salt) {
-  const kek = await deriveKeyFromPasswordAsync(password, salt);
+  const kek = await deriveKeyFromPassword(password, salt);
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGORITHM, kek, iv);
   const encrypted = Buffer.concat([cipher.update(masterKey), cipher.final()]);
@@ -71,7 +67,7 @@ async function encryptMasterKey(masterKey, password, salt) {
 }
 
 async function decryptMasterKey(encryptedMK, password, salt, iv, authTag) {
-  const kek = await deriveKeyFromPasswordAsync(password, salt);
+  const kek = await deriveKeyFromPassword(password, salt);
   const decipher = crypto.createDecipheriv(ALGORITHM, kek, iv);
   decipher.setAuthTag(authTag);
   const decrypted = Buffer.concat([decipher.update(encryptedMK), decipher.final()]);
@@ -92,8 +88,8 @@ async function createAuthData(password) {
     version: FORMAT_VERSION,
     algorithm: 'argon2id',
     argon2: {
-      memoryCost: ARGON2_OPTIONS.memoryCost,
-      timeCost: ARGON2_OPTIONS.timeCost,
+      memorySize: ARGON2_OPTIONS.memorySize,
+      iterations: ARGON2_OPTIONS.iterations,
       parallelism: ARGON2_OPTIONS.parallelism
     },
     salt: salt.toString('hex'),
@@ -360,8 +356,8 @@ async function rotatePassword(masterKey, currentPassword, newPassword) {
     version: FORMAT_VERSION,
     algorithm: 'argon2id',
     argon2: {
-      memoryCost: ARGON2_OPTIONS.memoryCost,
-      timeCost: ARGON2_OPTIONS.timeCost,
+      memorySize: ARGON2_OPTIONS.memorySize,
+      iterations: ARGON2_OPTIONS.iterations,
       parallelism: ARGON2_OPTIONS.parallelism
     },
     salt: newSalt.toString('hex'),
