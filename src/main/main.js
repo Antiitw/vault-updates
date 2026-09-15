@@ -52,12 +52,14 @@ function createWindow() {
   });
 
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    const isDev = !app.isPackaged;
+    const csp = isDev
+      ? "default-src 'self' http://localhost:* ws://localhost:*; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' vault-thumb: data: blob:; font-src 'self'; connect-src 'self' http://localhost:* ws://localhost:*; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none';"
+      : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' vault-thumb: data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none';";
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' vault-thumb: data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none';"
-        ]
+        'Content-Security-Policy': [csp]
       }
     });
   });
@@ -145,7 +147,7 @@ ipcMain.handle('auth:login', async (e, password) => {
         const authPath = path.join(app.getPath('home'), '.vault-data', 'auth.json');
         if (fs.existsSync(authPath)) {
           const authData = JSON.parse(fs.readFileSync(authPath, 'utf8'));
-          if (authData.version === 2) {
+          if (authData.version === 2 && authData.mk_iv && authData.mk_encrypted && authData.mk_auth_tag && authData.mk_verify) {
             masterKey = cryptoV2.loadMasterKey(authData, password);
           }
         }

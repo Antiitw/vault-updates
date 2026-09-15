@@ -161,12 +161,12 @@ function setDbPassword(password) {
 
   try {
     const authData = JSON.parse(fs.readFileSync(authPath, 'utf8'));
-    if (authData.version === 2) {
+    if (authData.version === 2 && authData.mk_iv && authData.mk_encrypted && authData.mk_auth_tag && authData.mk_verify) {
       const cryptoV2 = require('./crypto-v2');
       const mk = cryptoV2.loadMasterKey(authData, password);
       setMasterKey(mk);
     } else {
-      dbLog('setDbPassword: legacy auth version ' + authData.version);
+      dbLog('setDbPassword: legacy or incomplete auth version ' + authData.version);
     }
   } catch (err) {
     dbLog('setDbPassword: failed to load master key: ' + err.message);
