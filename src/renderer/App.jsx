@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 
-const { ipcRenderer } = window.require('electron');
-
 function Splash({ onDone }) {
   const [phase, setPhase] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -54,24 +52,35 @@ function App() {
   const [settings, setSettings] = useState({ theme: 'dark', language: 'en' });
 
   useEffect(() => {
-    ipcRenderer.invoke('settings:get').then(s => {
+    window.vaultAPI.invoke('settings:get').then(s => {
       setSettings(s);
-      applyTheme(s.theme);
+      applyTheme(s.theme, s.accentColor);
     });
-    ipcRenderer.invoke('auth:isUnlocked').then(setUnlocked).finally(() => setLoading(false));
+    window.vaultAPI.invoke('auth:isUnlocked').then(setUnlocked).finally(() => setLoading(false));
   }, []);
 
-  const applyTheme = (theme) => {
+  const applyTheme = (theme, accentColor) => {
     document.body.className = '';
     if (theme && theme !== 'dark') {
       document.body.classList.add('theme-' + theme);
+    }
+    if (accentColor) {
+      document.body.style.setProperty('--accent', accentColor);
+      document.body.style.setProperty('--accent-hover', accentColor + 'dd');
+      document.body.style.setProperty('--accent-glow', accentColor + '26');
+      document.body.style.setProperty('--accent-glow-strong', accentColor + '40');
+    } else {
+      document.body.style.removeProperty('--accent');
+      document.body.style.removeProperty('--accent-hover');
+      document.body.style.removeProperty('--accent-glow');
+      document.body.style.removeProperty('--accent-glow-strong');
     }
   };
 
   const handleSettingsSave = (newSettings) => {
     setSettings(newSettings);
-    applyTheme(newSettings.theme);
-    ipcRenderer.invoke('settings:save', newSettings);
+    applyTheme(newSettings.theme, newSettings.accentColor);
+    window.vaultAPI.invoke('settings:save', newSettings);
   };
 
   const handleUnlock = () => setUnlocked(true);
@@ -94,9 +103,9 @@ function App() {
       <div className="titlebar">
         <span className="titlebar-title">VAULT</span>
         <div className="titlebar-buttons">
-          <button className="titlebar-btn btn-minimize" onClick={() => ipcRenderer.invoke('window:minimize')} />
-          <button className="titlebar-btn btn-maximize" onClick={() => ipcRenderer.invoke('window:maximize')} />
-          <button className="titlebar-btn btn-close" onClick={() => ipcRenderer.invoke('window:close')} />
+          <button className="titlebar-btn btn-minimize" onClick={() => window.vaultAPI.invoke('window:minimize')} />
+          <button className="titlebar-btn btn-maximize" onClick={() => window.vaultAPI.invoke('window:maximize')} />
+          <button className="titlebar-btn btn-close" onClick={() => window.vaultAPI.invoke('window:close')} />
         </div>
       </div>
       {unlocked ? (

@@ -2,31 +2,40 @@ const initSqlJs = require('sql.js');
 const { DB_PATH, VAULT_DIR } = require('../shared/constants');
 const fs = require('fs');
 const path = require('path');
-const { encryptText, decryptText, encryptDatabase, decryptDatabase, secureClear } = require('./crypto');
+const crypto = require('crypto');
+const { encryptDatabase, decryptDatabase, secureClear, atomicWrite, secureCompare } = require('./crypto');
+const migration = require('./migration');
 
 function dbLog(msg) {
   try {
-    const { app } = require('electron');
-    const logPath = path.join(app.getPath('userData'), 'vault-debug.log');
+    const logPath = path.join(VAULT_DIR, 'vault.log');
     fs.appendFileSync(logPath, `[${new Date().toISOString()}] [DB] ${msg}\n`);
   } catch {}
 }
 
 let db = null;
 let sqlModule = null;
-let dbPassword = null;
+let masterKey = null;
 let dbReady = null;
 let dbDirty = false;
 let saveTimeout = null;
 let pendingSave = false;
+let lastCounter = 0;
+
+function ensureDirs() {
+  if (!fs.existsSync(VAULT_DIR)) {
+    fs.mkdirSync(VAULT_DIR, { recursive: true, mode: 0o700 });
+  }
+  try {
+    fs.chmodSync(VAULT_DIR, 0o700);
+  } catch {}
+}
 
 function ensureDb() {
   if (!dbReady) {
     dbReady = (async () => {
       try {
-        if (!fs.existsSync(VAULT_DIR)) {
-          fs.mkdirSync(VAULT_DIR, { recursive: true });
-        }
+        ensureDirs();
         sqlModule = await initSqlJs();
         db = new sqlModule.Database();
         db.run('PRAGMA journal_mode = WAL');
@@ -41,21 +50,38 @@ function ensureDb() {
   return dbReady;
 }
 
-function loadEncryptedDb(password) {
+function loadEncryptedDb(mk) {
   if (!db) { dbLog('loadEncryptedDb: no db'); return false; }
   if (!fs.existsSync(DB_PATH)) { dbLog('loadEncryptedDb: no DB file'); return false; }
   const buffer = fs.readFileSync(DB_PATH);
   dbLog('loadEncryptedDb: file=' + buffer.length + ' bytes');
-  if (buffer.length < 96) { dbLog('loadEncryptedDb: file too small'); return false; }
+  if (buffer.length < 50) { dbLog('loadEncryptedDb: file too small'); return false; }
+
+  const counterCheck = migration.verifyCounter(mk);
+  if (!counterCheck.valid) {
+    dbLog('loadEncryptedDb: counter signature invalid - possible rollback');
+    return false;
+  }
+
   const oldDb = db;
+  const previousCounter = lastCounter;
   try {
-    const decrypted = decryptDatabase(buffer, password);
+    const decrypted = decryptDatabase(buffer, mk);
     dbLog('loadEncryptedDb: decrypted=' + decrypted.length + ' bytes');
     db.close();
     const newDb = new sqlModule.Database(decrypted);
     newDb.run('PRAGMA journal_mode = WAL');
     db = newDb;
     initTables();
+
+    if (previousCounter > 0 && migration.detectRollback(counterCheck.counter, previousCounter)) {
+      dbLog('loadEncryptedDb: ROLLBACK DETECTED - counter decreased from ' + previousCounter + ' to ' + counterCheck.counter);
+      db.close();
+      db = oldDb;
+      return false;
+    }
+
+    lastCounter = counterCheck.counter;
     dbLog('loadEncryptedDb: success');
     return true;
   } catch (err) {
@@ -66,7 +92,7 @@ function loadEncryptedDb(password) {
 }
 
 function saveDb() {
-  if (!db || !dbPassword) return;
+  if (!db || !masterKey) return;
   if (saveTimeout) {
     pendingSave = true;
     return;
@@ -75,13 +101,21 @@ function saveDb() {
 }
 
 function _doSave() {
-  if (!db || !dbPassword) { dbLog('skip save: db=' + !!db + ' dbPassword=' + !!dbPassword); return; }
+  if (!db || !masterKey) { dbLog('skip save: db=' + !!db + ' masterKey=' + !!masterKey); return; }
   try {
     const data = db.export();
     const buffer = Buffer.from(data);
-    const encrypted = encryptDatabase(buffer, dbPassword);
-    fs.writeFileSync(DB_PATH, encrypted);
-    dbLog('DB saved: ' + encrypted.length + ' bytes (raw=' + buffer.length + ')');
+    const encrypted = encryptDatabase(buffer, masterKey);
+
+    atomicWrite(DB_PATH, encrypted);
+
+    try {
+      fs.chmodSync(DB_PATH, 0o600);
+    } catch {}
+
+    lastCounter = migration.incrementCounter(masterKey);
+
+    dbLog('DB saved: ' + encrypted.length + ' bytes (raw=' + buffer.length + ', counter=' + lastCounter + ')');
     secureClear(encrypted);
     secureClear(buffer);
   } catch (err) {
@@ -101,32 +135,59 @@ function flushDb() {
   }
 }
 
-function setDbPassword(password) {
-  dbPassword = password;
-  const loaded = loadEncryptedDb(password);
+function setMasterKey(mk) {
+  masterKey = mk;
+  const loaded = loadEncryptedDb(mk);
   if (!loaded) {
-    dbLog('setDbPassword: no encrypted DB loaded, initializing tables');
+    dbLog('setMasterKey: no encrypted DB loaded, initializing tables');
     initTables();
   }
 }
 
-function clearDbPassword() {
-  if (dbPassword) {
+function clearMasterKey() {
+  if (masterKey) {
     flushDb();
-    secureClear(Buffer.from(dbPassword));
+    secureClear(masterKey);
   }
-  dbPassword = null;
+  masterKey = null;
+}
+
+function setDbPassword(password) {
+  const authPath = path.join(VAULT_DIR, 'auth.json');
+  if (!fs.existsSync(authPath)) {
+    dbLog('setDbPassword: no auth file, using legacy mode');
+    return;
+  }
+
+  try {
+    const authData = JSON.parse(fs.readFileSync(authPath, 'utf8'));
+    if (authData.version === 2) {
+      const cryptoV2 = require('./crypto-v2');
+      const mk = cryptoV2.loadMasterKey(authData, password);
+      setMasterKey(mk);
+    } else {
+      dbLog('setDbPassword: legacy auth version ' + authData.version);
+    }
+  } catch (err) {
+    dbLog('setDbPassword: failed to load master key: ' + err.message);
+  }
+}
+
+function clearDbPassword() {
+  clearMasterKey();
 }
 
 function enc(text) {
-  if (!text || !dbPassword) return text;
-  return encryptText(String(text), dbPassword);
+  if (!text || !masterKey) return text;
+  const cryptoV2 = require('./crypto-v2');
+  return cryptoV2.encryptText(text, masterKey);
 }
 
 function dec(encrypted) {
-  if (!encrypted || !dbPassword) return encrypted;
+  if (!encrypted || !masterKey) return encrypted;
   try {
-    return decryptText(encrypted, dbPassword);
+    const cryptoV2 = require('./crypto-v2');
+    return cryptoV2.decryptText(encrypted, masterKey);
   } catch {
     return '';
   }
@@ -473,7 +534,7 @@ function closeDb() {
     db = null;
   }
   dbReady = null;
-  clearDbPassword();
+  clearMasterKey();
 }
 
 module.exports = {

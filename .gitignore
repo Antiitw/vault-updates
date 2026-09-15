@@ -4,3 +4,5 @@ release/
 *.log
 .env
 .env.local
+backups/
+.vault-data/

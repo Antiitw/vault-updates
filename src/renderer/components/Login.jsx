@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-const { ipcRenderer } = window.require('electron');
 
 function Login({ onUnlock }) {
   const [password, setPassword] = useState('');
@@ -12,10 +11,10 @@ function Login({ onUnlock }) {
   const [fingerprintLoading, setFingerprintLoading] = useState(false);
 
   useEffect(() => {
-    ipcRenderer.invoke('auth:isInitialized').then(init => {
+    window.vaultAPI.invoke('auth:isInitialized').then(init => {
       setIsNew(!init);
       if (init) {
-        ipcRenderer.invoke('webauthn:hasCredential').then(setHasFingerprint);
+        window.vaultAPI.invoke('webauthn:hasCredential').then(setHasFingerprint);
       }
     });
   }, []);
@@ -43,16 +42,16 @@ function Login({ onUnlock }) {
           setLoading(false);
           return;
         }
-        const result = await ipcRenderer.invoke('auth:setup', password);
+        const result = await window.vaultAPI.invoke('auth:setup', password);
         if (result.success) {
-          const regResult = await ipcRenderer.invoke('webauthn:register');
+          const regResult = await window.vaultAPI.invoke('webauthn:register');
           if (regResult.success) {
             setHasFingerprint(true);
           }
           onUnlock();
         }
       } else {
-        const result = await ipcRenderer.invoke('auth:login', password);
+        const result = await window.vaultAPI.invoke('auth:login', password);
         if (result.success) {
           onUnlock();
         } else {
@@ -70,9 +69,9 @@ function Login({ onUnlock }) {
     setError('');
     setFingerprintLoading(true);
     try {
-      const result = await ipcRenderer.invoke('webauthn:authenticate');
+      const result = await window.vaultAPI.invoke('webauthn:authenticate');
       if (result.success) {
-        ipcRenderer.invoke('auth:isUnlocked').then(unlocked => {
+        window.vaultAPI.invoke('auth:isUnlocked').then(unlocked => {
           if (unlocked) {
             onUnlock();
           } else {
@@ -92,7 +91,7 @@ function Login({ onUnlock }) {
     setFingerprintLoading(true);
     setError('');
     try {
-      const result = await ipcRenderer.invoke('webauthn:register');
+      const result = await window.vaultAPI.invoke('webauthn:register');
       if (result.success) {
         setHasFingerprint(true);
       } else {
