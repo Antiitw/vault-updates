@@ -10,6 +10,7 @@ const fm = require('./file-manager');
 const { getSettings, saveSettings } = require('./settings');
 const migration = require('./migration');
 const cryptoV2 = require('./crypto-v2');
+const { VAULT_DIR } = require('../shared/constants');
 
 const LOG_PATH = path.join(app.getPath('userData'), 'vault-debug.log');
 
@@ -164,6 +165,31 @@ ipcMain.handle('auth:login', async (e, password) => {
   }
 });
 ipcMain.handle('auth:isUnlocked', () => !!currentPassword);
+ipcMain.handle('auth:changePassword', async (e, currentPw, newPw) => {
+  if (!currentPassword) return { success: false, error: 'Not authenticated' };
+  if (!currentPw || !newPw) return { success: false, error: 'Password required' };
+  if (newPw.length < 8) return { success: false, error: 'Password too short' };
+  try {
+    const authPath = path.join(app.getPath('home'), '.vault-data', 'auth.json');
+    const authData = JSON.parse(fs.readFileSync(authPath, 'utf8'));
+    const { hashPassword, verifyPassword, atomicWrite } = require('./crypto');
+
+    if (!verifyPassword(currentPw, authData)) {
+      return { success: false, error: 'Current password incorrect' };
+    }
+
+    const newHashed = hashPassword(newPw);
+    atomicWrite(authPath, JSON.stringify(newHashed, null, 2));
+    try { fs.chmodSync(authPath, 0o600); } catch {}
+
+    currentPassword = newPw;
+    db.setDbPassword(newPw);
+    return { success: true };
+  } catch (err) {
+    safeLog('auth:changePassword ERROR: ' + err.message);
+    return { success: false, error: 'Failed to change password' };
+  }
+});
 
 ipcMain.handle('migration:status', () => migration.getMigrationStatus());
 ipcMain.handle('migration:start', async (e, password) => {
@@ -371,6 +397,20 @@ ipcMain.handle('webauthn:delete', (e, id) => { if (!currentPassword) return { su
 
 ipcMain.handle('settings:get', () => getSettings());
 ipcMain.handle('settings:save', (e, settings) => saveSettings(settings));
+
+ipcMain.handle('vault:export', async () => {
+  if (!currentPassword) return { success: false, error: 'Not authenticated' };
+  try {
+    const { createBackup } = require('./backup');
+    const result = await createBackup(masterKey, (progress) => {
+      mainWindow?.webContents.send('backup:progress', progress);
+    });
+    return result;
+  } catch (err) {
+    safeLog('vault:export ERROR: ' + err.message);
+    return { success: false, error: err.message };
+  }
+});
 
 ipcMain.handle('window:minimize', () => mainWindow?.minimize());
 ipcMain.handle('window:maximize', () => {

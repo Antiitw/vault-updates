@@ -198,7 +198,7 @@ function Settings({ settings, onSave, onClose }) {
               </button>
             ))}
             <div className="settings-sidebar-footer">
-              <div className="settings-sidebar-version">Vault v1.0.5</div>
+              <div className="settings-sidebar-version">Vault v1.0.6</div>
             </div>
           </div>
 
@@ -535,7 +535,7 @@ function Settings({ settings, onSave, onClose }) {
                     </div>
                   </div>
                   <h3 className="settings-about-name">Vault</h3>
-                  <span className="settings-about-version">v1.0.5</span>
+                  <span className="settings-about-version">v1.0.6</span>
                   <p className="settings-about-desc">Encrypted file, note, and password storage. Local-first, no cloud, no tracking.</p>
                 </div>
                 <div className="settings-cards-grid">

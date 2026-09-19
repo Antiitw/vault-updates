@@ -4,7 +4,7 @@ const ALLOWED_CHANNELS = {
   invoke: [
     'settings:get', 'settings:save',
     'auth:isUnlocked', 'auth:isInitialized', 'auth:setup', 'auth:login', 'auth:changePassword',
-    'files:list', 'files:add', 'files:delete', 'files:getPath', 'files:decrypt', 'files:getThumbBase64',
+    'files:list', 'files:add', 'files:delete', 'files:getPath', 'files:decrypt', 'files:getThumbBase64', 'files:readContent',
     'notes:list', 'notes:add', 'notes:delete', 'notes:update',
     'passwords:list', 'passwords:add', 'passwords:delete', 'passwords:update', 'passwords:toggleFavorite',
     'folders:list', 'folders:add', 'folders:delete',

@@ -11,7 +11,7 @@ function Sidebar({ view, setView, folders, currentFolder, setCurrentFolder, stat
             <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </div>
           <span className="sidebar-logo-text">Vault</span>
-          <span className="sidebar-version">v1.0.5</span>
+          <span className="sidebar-version">v1.0.6</span>
         </div>
         <div className="search-box" onClick={onOpenSearch}>
           <svg className="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
